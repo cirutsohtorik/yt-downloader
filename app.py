@@ -1,18 +1,59 @@
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, jsonify
+import sys
 import yt_dlp
 import os
 import uuid
 import subprocess
 import re
+import sys
 
 app = Flask(__name__)
 
-DOWNLOAD_DIR = "downloads"
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+TEMP_DIR = os.path.join(
+    os.path.expanduser("~"),
+    "AppData",
+    "Local",
+    "YT_Downloader_Temp"
+)
+
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
+if getattr(sys, 'frozen', False):
+    FFMPEG_PATH = os.path.join(sys._MEIPASS, "ffmpeg.exe")
+else:
+    FFMPEG_PATH = "ffmpeg.exe"
+
+
+def run_command_silent(command):
+    startupinfo = None
+    creationflags = 0
+
+    if os.name == "nt":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        creationflags = subprocess.CREATE_NO_WINDOW
+
+    subprocess.run(
+        command,
+        check=True,
+        startupinfo=startupinfo,
+        creationflags=creationflags,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
 
 
 def sanitize_filename(name):
-
     name = name.replace(" ", "_")
 
     name = re.sub(
@@ -25,7 +66,6 @@ def sanitize_filename(name):
 
 
 def seconds_to_hhmmss(seconds):
-
     if seconds is None:
         return "00:00:00"
 
@@ -39,17 +79,16 @@ def seconds_to_hhmmss(seconds):
 
 
 def hhmmss_to_seconds(time_str):
-
     h, m, s = map(int, time_str.split(":"))
-
     return h * 3600 + m * 60 + s
 
 
 def get_video_info(url):
-
     ydl_opts = {
         "quiet": True,
+        "no_warnings": True,
         "skip_download": True,
+        "noplaylist": True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -59,7 +98,6 @@ def get_video_info(url):
     audio_bitrates = []
 
     for fmt in info.get("formats", []):
-
         height = fmt.get("height")
         vcodec = fmt.get("vcodec")
         abr = fmt.get("abr")
@@ -78,16 +116,29 @@ def get_video_info(url):
         "duration": duration,
         "duration_text": seconds_to_hhmmss(duration),
         "max_height": max(heights) if heights else None,
-        "audio_qualities": sorted(
-            list(set(audio_bitrates))
-        )
+        "audio_qualities": sorted(list(set(audio_bitrates))) or [128, 192, 256, 320]
     }
 
 
-def cut_mp4(input_file, output_file, start_time, end_time):
-
+def convert_audio(input_file, output_file, start_time, end_time, quality):
     command = [
-        "ffmpeg",
+        FFMPEG_PATH,
+        "-y",
+        "-ss", start_time,
+        "-i", input_file,
+        "-to", end_time,
+        "-vn",
+        "-acodec", "libmp3lame",
+        "-b:a", f"{quality}k",
+        output_file
+    ]
+
+    run_command_silent(command)
+
+
+def convert_video(input_file, output_file, start_time, end_time):
+    command = [
+        FFMPEG_PATH,
         "-y",
         "-ss", start_time,
         "-i", input_file,
@@ -99,24 +150,7 @@ def cut_mp4(input_file, output_file, start_time, end_time):
         output_file
     ]
 
-    subprocess.run(command, check=True)
-
-
-def cut_mp3(input_file, output_file, start_time, end_time):
-
-    command = [
-        "ffmpeg",
-        "-y",
-        "-ss", start_time,
-        "-i", input_file,
-        "-to", end_time,
-        "-vn",
-        "-acodec", "libmp3lame",
-        "-b:a", "192k",
-        output_file
-    ]
-
-    subprocess.run(command, check=True)
+    run_command_silent(command)
 
 
 @app.route("/")
@@ -126,45 +160,57 @@ def index():
 
 @app.route("/api/info", methods=["POST"])
 def api_info():
-
     data = request.get_json()
-
     url = data.get("url")
 
     if not url:
         return jsonify({
-            "success": False
+            "success": False,
+            "error": "URL boş."
         })
 
     try:
-
         video = get_video_info(url)
+
+        safe_title = sanitize_filename(video["title"])
 
         return jsonify({
             "success": True,
-            "video": video
+            "video": video,
+            "safe_title": safe_title
         })
 
-    except:
+    except Exception as e:
         return jsonify({
-            "success": False
+            "success": False,
+            "error": str(e)
         })
 
 
-@app.route("/download", methods=["POST"])
-def download():
+@app.route("/api/download", methods=["POST"])
+def api_download():
+    data = request.get_json()
 
-    url = request.form.get("url")
-    file_type = request.form.get("file_type")
-    quality = request.form.get("quality")
-    start_time = request.form.get("start_time")
-    end_time = request.form.get("end_time")
+    url = data.get("url")
+    file_type = data.get("file_type")
+    quality = data.get("quality")
+    start_time = data.get("start_time")
+    end_time = data.get("end_time")
+    save_path = data.get("save_path")
 
     if not url:
-        return "URL boş.", 400
+        return jsonify({
+            "success": False,
+            "error": "URL boş."
+        })
+
+    if not save_path:
+        return jsonify({
+            "success": False,
+            "error": "Kayıt yeri seçilmedi."
+        })
 
     try:
-
         video = get_video_info(url)
 
         duration_seconds = video["duration"]
@@ -173,146 +219,111 @@ def download():
         end_seconds = hhmmss_to_seconds(end_time)
 
         if end_seconds > duration_seconds:
-
-            return render_template(
-                "index.html",
-                server_error="Bitiş süresi video süresini geçiyor."
-            )
+            return jsonify({
+                "success": False,
+                "error": "Bitiş süresi video süresini geçiyor."
+            })
 
         if start_seconds >= end_seconds:
+            return jsonify({
+                "success": False,
+                "error": "Başlangıç süresi bitiş süresinden büyük olamaz."
+            })
 
-            return render_template(
-                "index.html",
-                server_error="Başlangıç süresi bitiş süresinden büyük olamaz."
-            )
-
-        safe_title = sanitize_filename(
-            video["title"]
-        )
+        temp_id = str(uuid.uuid4())
 
         if file_type == "mp3":
-
-            final_name = f"{safe_title}_sound.mp3"
-
-            downloaded_file = os.path.join(
-                DOWNLOAD_DIR,
-                f"{uuid.uuid4()}.mp3"
+            temp_input = os.path.join(
+                TEMP_DIR,
+                f"{temp_id}.%(ext)s"
             )
 
-            cut_output = os.path.join(
-                DOWNLOAD_DIR,
-                final_name
+            temp_downloaded = os.path.join(
+                TEMP_DIR,
+                f"{temp_id}.m4a"
             )
 
             ydl_opts = {
-
-                "format": "bestaudio/best",
-
-                "outtmpl":
-                downloaded_file.replace(
-                    ".mp3",
-                    ".%(ext)s"
-                ),
-
-                "postprocessors": [
-                    {
-                        "key":
-                        "FFmpegExtractAudio",
-
-                        "preferredcodec":
-                        "mp3",
-
-                        "preferredquality":
-                        quality,
-                    }
-                ],
+                "format": "bestaudio[ext=m4a]/bestaudio/best",
+                "outtmpl": temp_input,
+                "quiet": True,
+                "no_warnings": True,
+                "noplaylist": True,
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
 
-            cut_mp3(
-                downloaded_file,
-                cut_output,
-                start_time,
-                end_time
-            )
+            if not os.path.exists(temp_downloaded):
+                for file in os.listdir(TEMP_DIR):
+                    if file.startswith(temp_id):
+                        temp_downloaded = os.path.join(TEMP_DIR, file)
+                        break
 
-            return send_file(
-                cut_output,
-                as_attachment=True,
-                download_name=final_name
+            convert_audio(
+                temp_downloaded,
+                save_path,
+                start_time,
+                end_time,
+                quality
             )
 
         else:
-
-            final_name = f"{safe_title}_video.mp4"
-
-            downloaded_file = os.path.join(
-                DOWNLOAD_DIR,
-                f"{uuid.uuid4()}.mp4"
+            temp_input = os.path.join(
+                TEMP_DIR,
+                f"{temp_id}.%(ext)s"
             )
 
-            cut_output = os.path.join(
-                DOWNLOAD_DIR,
-                final_name
+            temp_downloaded = os.path.join(
+                TEMP_DIR,
+                f"{temp_id}.mp4"
             )
 
             quality_map = {
-
-                "360":
-                "bestvideo[height<=360]+bestaudio/best",
-
-                "480":
-                "bestvideo[height<=480]+bestaudio/best",
-
-                "720":
-                "bestvideo[height<=720]+bestaudio/best",
-
-                "1080":
-                "bestvideo[height<=1080]+bestaudio/best",
-
-                "best":
-                "bestvideo+bestaudio/best",
+                "360": "best[ext=mp4][height<=360]/best[height<=360]",
+                "480": "best[ext=mp4][height<=480]/best[height<=480]",
+                "720": "best[ext=mp4][height<=720]/best[height<=720]",
+                "1080": "best[ext=mp4][height<=1080]/best[height<=1080]",
+                "best": "best[ext=mp4]/best",
             }
 
             ydl_opts = {
-
-                "format":
-                quality_map.get(
+                "format": quality_map.get(
                     quality,
-                    "bestvideo+bestaudio/best"
+                    "best[ext=mp4]/best"
                 ),
-
-                "outtmpl":
-                downloaded_file.replace(
-                    ".mp4",
-                    ".%(ext)s"
-                ),
-
-                "merge_output_format":
-                "mp4",
+                "outtmpl": temp_input,
+                "quiet": True,
+                "no_warnings": True,
+                "noplaylist": True,
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
 
-            cut_mp4(
-                downloaded_file,
-                cut_output,
+            if not os.path.exists(temp_downloaded):
+                for file in os.listdir(TEMP_DIR):
+                    if file.startswith(temp_id):
+                        temp_downloaded = os.path.join(TEMP_DIR, file)
+                        break
+
+            convert_video(
+                temp_downloaded,
+                save_path,
                 start_time,
                 end_time
             )
 
-            return send_file(
-                cut_output,
-                as_attachment=True,
-                download_name=final_name
-            )
+        return jsonify({
+            "success": True,
+            "path": save_path
+        })
 
     except Exception as e:
-
-        return f"Hata oluştu: {str(e)}", 500
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
 
 
 if __name__ == "__main__":
