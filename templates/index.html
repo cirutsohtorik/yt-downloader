@@ -44,7 +44,8 @@ body {
 
     color: white;
 
-    overflow-x: hidden;
+overflow-y: auto;
+overflow-x: hidden;
 }
 
 body::before {
@@ -66,6 +67,7 @@ body::before {
 }
 
 .container {
+    margin: 40px 0;
 
     width: 480px;
 
@@ -83,11 +85,13 @@ body::before {
 
     box-shadow:
     0 10px 40px rgba(0,0,0,0.6);
+
+    z-index: 2;
 }
 
 h1 {
 
-    text-align: center;
+    align-items: flex-start;
 
     margin-bottom: 28px;
 
@@ -339,11 +343,129 @@ button:disabled {
     1px solid rgba(255,255,255,0.04);
 }
 
+.particle-layer {
+
+    pointer-events: none;
+
+    position: fixed;
+
+    inset: 0;
+
+    overflow: hidden;
+
+    z-index: 1;
+}
+
+.particle {
+
+    position: absolute;
+
+    width: 6px;
+
+    height: 6px;
+
+    border-radius: 50%;
+
+    background:
+    rgba(160,120,255,0.95);
+
+    box-shadow:
+    0 0 12px rgba(160,120,255,0.9);
+
+    animation:
+    particleFloat 1.4s ease-out forwards;
+}
+
+@keyframes particleFloat {
+
+    0% {
+        opacity: 0;
+        transform:
+        translateY(20px)
+        scale(0.7);
+    }
+
+    20% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+        transform:
+        translateY(-140px)
+        scale(1.4);
+    }
+}
+
+.download-toast {
+
+    position: fixed;
+
+    top: 32px;
+
+    left: 50%;
+
+    transform:
+    translateX(-50%)
+    translateY(-20px);
+
+    background:
+    rgba(15,15,15,0.92);
+
+    border:
+    1px solid rgba(124,58,237,0.45);
+
+    box-shadow:
+    0 10px 35px rgba(0,0,0,0.55),
+    0 0 25px rgba(124,58,237,0.25);
+
+    color: white;
+
+    padding:
+    15px
+    24px;
+
+    border-radius: 999px;
+
+    font-weight: 700;
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    z-index: 5;
+
+    transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.download-toast.show {
+
+    opacity: 1;
+
+    transform:
+    translateX(-50%)
+    translateY(0);
+}
+
 </style>
 
 </head>
 
 <body>
+
+<div
+    class="particle-layer"
+    id="particleLayer"
+></div>
+
+<div
+    class="download-toast"
+    id="downloadToast"
+>
+    İndirildi
+</div>
 
 <div class="container">
 
@@ -548,6 +670,12 @@ document.getElementById("buttonText");
 const form =
 document.getElementById("downloadForm");
 
+const particleLayer =
+document.getElementById("particleLayer");
+
+const downloadToast =
+document.getElementById("downloadToast");
+
 let typingTimer;
 let currentVideo = null;
 let safeTitle = "";
@@ -678,6 +806,66 @@ function getDefaultFilename() {
     }
 
     return `${safeTitle}_video.mp4`;
+}
+
+function launchDownloadEffect() {
+
+    downloadToast.classList.add("show");
+
+    setTimeout(function () {
+        downloadToast.classList.remove("show");
+    }, 1800);
+
+    for (let i = 0; i < 42; i++) {
+
+        const particle =
+        document.createElement("div");
+
+        particle.className =
+        "particle";
+
+        const x =
+        Math.random() * window.innerWidth;
+
+        const y =
+        window.innerHeight
+        - Math.random() * 180;
+
+        const size =
+        3 + Math.random() * 5;
+
+        const delay =
+        Math.random() * 0.25;
+
+        const duration =
+        1.1 + Math.random() * 0.7;
+
+        particle.style.left =
+        `${x}px`;
+
+        particle.style.top =
+        `${y}px`;
+
+        particle.style.width =
+        `${size}px`;
+
+        particle.style.height =
+        `${size}px`;
+
+        particle.style.animationDelay =
+        `${delay}s`;
+
+        particle.style.animationDuration =
+        `${duration}s`;
+
+        particleLayer.appendChild(
+            particle
+        );
+
+        setTimeout(function () {
+            particle.remove();
+        }, 2200);
+    }
 }
 
 async function fetchVideoInfo() {
@@ -882,9 +1070,12 @@ form.addEventListener(
         }
 
         else {
+
             showSuccess(
                 `Kaydedildi: ${data.path}`
             );
+
+            launchDownloadEffect();
         }
 
     }

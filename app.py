@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, jsonify
-import sys
 import yt_dlp
 import os
 import uuid
@@ -28,10 +27,7 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-if getattr(sys, 'frozen', False):
-    FFMPEG_PATH = os.path.join(sys._MEIPASS, "ffmpeg.exe")
-else:
-    FFMPEG_PATH = "ffmpeg.exe"
+FFMPEG_PATH = resource_path("ffmpeg.exe")
 
 
 def run_command_silent(command):
@@ -55,13 +51,7 @@ def run_command_silent(command):
 
 def sanitize_filename(name):
     name = name.replace(" ", "_")
-
-    name = re.sub(
-        r'[^a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ]',
-        '',
-        name
-    )
-
+    name = re.sub(r'[^a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ]', '', name)
     return name
 
 
@@ -171,7 +161,6 @@ def api_info():
 
     try:
         video = get_video_info(url)
-
         safe_title = sanitize_filename(video["title"])
 
         return jsonify({
@@ -238,13 +227,8 @@ def api_download():
                 f"{temp_id}.%(ext)s"
             )
 
-            temp_downloaded = os.path.join(
-                TEMP_DIR,
-                f"{temp_id}.m4a"
-            )
-
             ydl_opts = {
-                "format": "bestaudio[ext=m4a]/bestaudio/best",
+                "format": "bestaudio/best",
                 "outtmpl": temp_input,
                 "quiet": True,
                 "no_warnings": True,
@@ -254,11 +238,18 @@ def api_download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
 
-            if not os.path.exists(temp_downloaded):
-                for file in os.listdir(TEMP_DIR):
-                    if file.startswith(temp_id):
-                        temp_downloaded = os.path.join(TEMP_DIR, file)
-                        break
+            temp_downloaded = None
+
+            for file in os.listdir(TEMP_DIR):
+                if file.startswith(temp_id):
+                    temp_downloaded = os.path.join(TEMP_DIR, file)
+                    break
+
+            if not temp_downloaded:
+                return jsonify({
+                    "success": False,
+                    "error": "Ses dosyası indirilemedi."
+                })
 
             convert_audio(
                 temp_downloaded,
@@ -269,30 +260,38 @@ def api_download():
             )
 
         else:
+            max_height = video["max_height"]
+
+            if quality != "best":
+                selected_quality = int(quality)
+
+                if max_height and selected_quality > max_height:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Bu video en fazla {max_height}p destekliyor."
+                    })
+
             temp_input = os.path.join(
                 TEMP_DIR,
                 f"{temp_id}.%(ext)s"
             )
 
-            temp_downloaded = os.path.join(
-                TEMP_DIR,
-                f"{temp_id}.mp4"
-            )
-
             quality_map = {
-                "360": "best[ext=mp4][height<=360]/best[height<=360]",
-                "480": "best[ext=mp4][height<=480]/best[height<=480]",
-                "720": "best[ext=mp4][height<=720]/best[height<=720]",
-                "1080": "best[ext=mp4][height<=1080]/best[height<=1080]",
-                "best": "best[ext=mp4]/best",
+                "360": "bestvideo[height<=360]+bestaudio/best[height<=360]",
+                "480": "bestvideo[height<=480]+bestaudio/best[height<=480]",
+                "720": "bestvideo[height<=720]+bestaudio/best[height<=720]",
+                "1080": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+                "best": "bestvideo+bestaudio/best",
             }
 
             ydl_opts = {
                 "format": quality_map.get(
                     quality,
-                    "best[ext=mp4]/best"
+                    "bestvideo+bestaudio/best"
                 ),
                 "outtmpl": temp_input,
+                "merge_output_format": "mp4",
+                "ffmpeg_location": FFMPEG_PATH,
                 "quiet": True,
                 "no_warnings": True,
                 "noplaylist": True,
@@ -301,11 +300,18 @@ def api_download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
 
-            if not os.path.exists(temp_downloaded):
-                for file in os.listdir(TEMP_DIR):
-                    if file.startswith(temp_id):
-                        temp_downloaded = os.path.join(TEMP_DIR, file)
-                        break
+            temp_downloaded = None
+
+            for file in os.listdir(TEMP_DIR):
+                if file.startswith(temp_id) and file.endswith(".mp4"):
+                    temp_downloaded = os.path.join(TEMP_DIR, file)
+                    break
+
+            if not temp_downloaded:
+                return jsonify({
+                    "success": False,
+                    "error": "Video dosyası indirilemedi."
+                })
 
             convert_video(
                 temp_downloaded,
