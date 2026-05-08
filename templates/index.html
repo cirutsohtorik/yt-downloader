@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>YT Downloader</title>
+
+<style>
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+
+    min-height: 100vh;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    background:
+    linear-gradient(
+        180deg,
+        #050505 0%,
+        #090909 45%,
+        #12091f 100%
+    );
+
+    font-family:
+    Inter,
+    Arial,
+    sans-serif;
+
+    color: white;
+
+    overflow-x: hidden;
+}
+
+body::before {
+
+    content: "";
+
+    position: fixed;
+
+    inset: 0;
+
+    background:
+    radial-gradient(
+        circle at top,
+        rgba(91,44,191,0.28),
+        transparent 40%
+    );
+
+    pointer-events: none;
+}
+
+.container {
+
+    width: 480px;
+
+    background:
+    rgba(15,15,15,0.88);
+
+    border:
+    1px solid rgba(255,255,255,0.05);
+
+    border-radius: 24px;
+
+    padding: 32px;
+
+    backdrop-filter: blur(18px);
+
+    box-shadow:
+    0 10px 40px rgba(0,0,0,0.6);
+}
+
+h1 {
+
+    text-align: center;
+
+    margin-bottom: 28px;
+
+    font-size: 34px;
+
+    font-weight: 700;
+}
+
+label {
+
+    display: block;
+
+    margin-top: 18px;
+
+    margin-bottom: 8px;
+
+    color: #d5d5d5;
+
+    font-size: 14px;
+}
+
+input,
+select,
+button {
+
+    width: 100%;
+
+    border: none;
+
+    border-radius: 14px;
+
+    padding: 14px;
+
+    font-size: 15px;
+}
+
+input,
+select {
+
+    background:
+    rgba(255,255,255,0.06);
+
+    color: white;
+
+    border:
+    1px solid rgba(255,255,255,0.05);
+
+    outline: none;
+}
+
+input:focus,
+select:focus {
+
+    border:
+    1px solid #7c3aed;
+}
+
+option {
+
+    background: #111111;
+
+    color: white;
+}
+
+button {
+
+    margin-top: 24px;
+
+    background:
+    linear-gradient(
+        90deg,
+        #5b2cbf,
+        #7c3aed
+    );
+
+    color: white;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    height: 54px;
+}
+
+button:disabled {
+
+    opacity: 0.5;
+
+    cursor: not-allowed;
+}
+
+.button-content {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 10px;
+}
+
+.spinner {
+
+    width: 18px;
+
+    height: 18px;
+
+    border:
+    2px solid rgba(255,255,255,0.3);
+
+    border-top:
+    2px solid white;
+
+    border-radius: 50%;
+
+    animation:
+    spin 0.7s linear infinite;
+
+    display: none;
+}
+
+@keyframes spin {
+
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.video-card {
+
+    display: none;
+
+    margin-top: 22px;
+
+    overflow: hidden;
+
+    border-radius: 20px;
+
+    background:
+    rgba(255,255,255,0.04);
+
+    border:
+    1px solid rgba(255,255,255,0.05);
+}
+
+.video-card img {
+
+    width: 100%;
+
+    display: block;
+}
+
+.video-info {
+
+    padding: 16px;
+}
+
+.video-title {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    margin-bottom: 10px;
+}
+
+.video-meta {
+
+    color: #bdbdbd;
+
+    font-size: 14px;
+
+    margin-top: 5px;
+}
+
+.error {
+
+    margin-top: 20px;
+
+    background:
+    rgba(255,0,0,0.12);
+
+    border:
+    1px solid rgba(255,0,0,0.2);
+
+    padding: 13px;
+
+    border-radius: 14px;
+
+    color: #ffb4b4;
+
+    display: none;
+}
+
+.row {
+
+    display: flex;
+
+    gap: 12px;
+}
+
+.loading {
+
+    display: none;
+
+    margin-top: 12px;
+
+    color: #bdbdbd;
+
+    font-size: 14px;
+}
+
+.cut-box {
+
+    margin-top: 20px;
+
+    padding: 18px;
+
+    border-radius: 18px;
+
+    background:
+    rgba(255,255,255,0.03);
+
+    border:
+    1px solid rgba(255,255,255,0.04);
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>YT Downloader</h1>
+
+<form id="downloadForm">
+
+<label>YouTube URL</label>
+
+<input
+    type="text"
+    name="url"
+    id="urlInput"
+    placeholder="https://youtube.com/..."
+    required
+>
+
+<div
+    class="loading"
+    id="loadingText"
+>
+    Video bilgisi alınıyor...
+</div>
+
+<div
+    class="error"
+    id="errorBox"
+></div>
+
+<div
+    class="video-card"
+    id="videoCard"
+>
+
+<img
+    id="thumbnail"
+    src=""
+>
+
+<div class="video-info">
+
+<div
+    class="video-title"
+    id="videoTitle"
+></div>
+
+<div class="video-meta">
+
+Maksimum kalite:
+
+<span id="maxQuality"></span>
+
+</div>
+
+<div class="video-meta">
+
+Süre:
+
+<span id="durationText"></span>
+
+</div>
+
+</div>
+
+</div>
+
+<label>Dosya Tipi</label>
+
+<select
+    name="file_type"
+    id="fileType"
+>
+
+<option value="mp4">
+    MP4 Video
+</option>
+
+<option value="mp3">
+    MP3 Ses
+</option>
+
+</select>
+
+<label id="qualityLabel">
+    Video Kalitesi
+</label>
+
+<select
+    name="quality"
+    id="qualitySelect"
+></select>
+
+<div class="cut-box">
+
+<label>Kesme</label>
+
+<div class="row">
+
+<input
+    type="time"
+    step="1"
+    name="start_time"
+    id="startInput"
+    value="00:00:00"
+>
+
+<input
+    type="time"
+    step="1"
+    name="end_time"
+    id="endInput"
+    value="00:00:00"
+>
+
+</div>
+
+</div>
+
+<button
+    type="submit"
+    id="downloadBtn"
+    disabled
+>
+
+<div class="button-content">
+
+<div
+    class="spinner"
+    id="spinner"
+></div>
+
+<span id="buttonText">
+    İndir
+</span>
+
+</div>
+
+</button>
+
+</form>
+
+</div>
+
+<script>
+
+const urlInput =
+document.getElementById("urlInput");
+
+const videoCard =
+document.getElementById("videoCard");
+
+const thumbnail =
+document.getElementById("thumbnail");
+
+const videoTitle =
+document.getElementById("videoTitle");
+
+const maxQuality =
+document.getElementById("maxQuality");
+
+const durationText =
+document.getElementById("durationText");
+
+const loadingText =
+document.getElementById("loadingText");
+
+const errorBox =
+document.getElementById("errorBox");
+
+const qualitySelect =
+document.getElementById("qualitySelect");
+
+const qualityLabel =
+document.getElementById("qualityLabel");
+
+const fileType =
+document.getElementById("fileType");
+
+const downloadBtn =
+document.getElementById("downloadBtn");
+
+const startInput =
+document.getElementById("startInput");
+
+const endInput =
+document.getElementById("endInput");
+
+const spinner =
+document.getElementById("spinner");
+
+const buttonText =
+document.getElementById("buttonText");
+
+const form =
+document.getElementById("downloadForm");
+
+let typingTimer;
+let currentVideo = null;
+
+function formatDuration(seconds) {
+
+    if (!seconds) {
+        return "00:00:00";
+    }
+
+    const h =
+    Math.floor(seconds / 3600);
+
+    const m =
+    Math.floor(
+        (seconds % 3600) / 60
+    );
+
+    const s =
+    seconds % 60;
+
+    return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function updateQualityOptions() {
+
+    qualitySelect.innerHTML = "";
+
+    if (!currentVideo) {
+        return;
+    }
+
+    if (fileType.value === "mp3") {
+
+        qualityLabel.textContent =
+        "Ses Kalitesi";
+
+        currentVideo.audio_qualities.forEach(q => {
+
+            const option =
+            document.createElement("option");
+
+            option.value = q;
+
+            option.textContent =
+            `${q} kbps`;
+
+            qualitySelect.appendChild(option);
+
+        });
+
+    }
+
+    else {
+
+        qualityLabel.textContent =
+        "Video Kalitesi";
+
+        [
+            "360",
+            "480",
+            "720",
+            "1080",
+            "best"
+        ].forEach(q => {
+
+            const option =
+            document.createElement("option");
+
+            option.value = q;
+
+            option.textContent =
+            q === "best"
+            ? "En İyi"
+            : `${q}p`;
+
+            qualitySelect.appendChild(option);
+
+        });
+
+    }
+}
+
+async function fetchVideoInfo() {
+
+    const url =
+    urlInput.value.trim();
+
+    if (url.length < 10) {
+        return;
+    }
+
+    loadingText.style.display =
+    "block";
+
+    try {
+
+        const response =
+        await fetch(
+            "/api/info",
+            {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type":
+                "application/json"
+            },
+
+            body:
+            JSON.stringify({
+                url: url
+            })
+
+            }
+        );
+
+        const data =
+        await response.json();
+
+        loadingText.style.display =
+        "none";
+
+        if (!data.success) {
+            return;
+        }
+
+        currentVideo =
+        data.video;
+
+        thumbnail.src =
+        currentVideo.thumbnail;
+
+        videoTitle.textContent =
+        currentVideo.title;
+
+        maxQuality.textContent =
+        currentVideo.max_height
+        ? `${currentVideo.max_height}p`
+        : "Bilinmiyor";
+
+        durationText.textContent =
+        formatDuration(
+            currentVideo.duration
+        );
+
+        startInput.value =
+        "00:00:00";
+
+        endInput.value =
+        formatDuration(
+            currentVideo.duration
+        );
+
+        updateQualityOptions();
+
+        videoCard.style.display =
+        "block";
+
+        downloadBtn.disabled =
+        false;
+
+    }
+
+    catch {
+
+        loadingText.style.display =
+        "none";
+    }
+}
+
+urlInput.addEventListener(
+    "input",
+    function () {
+
+    clearTimeout(
+        typingTimer
+    );
+
+    typingTimer =
+    setTimeout(
+        fetchVideoInfo,
+        700
+    );
+});
+
+fileType.addEventListener(
+    "change",
+    updateQualityOptions
+);
+
+form.addEventListener(
+    "submit",
+    async function (e) {
+
+    e.preventDefault();
+
+    spinner.style.display =
+    "block";
+
+    buttonText.textContent =
+    "İndiriliyor";
+
+    downloadBtn.disabled =
+    true;
+
+    try {
+
+        const formData =
+        new FormData(form);
+
+        const response =
+        await fetch(
+            "/download",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+        const blob =
+        await response.blob();
+
+        const url =
+        window.URL.createObjectURL(blob);
+
+        const a =
+        document.createElement("a");
+
+        a.href = url;
+
+        a.download = "download";
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        a.remove();
+
+        window.URL.revokeObjectURL(url);
+
+    }
+
+    catch {
+
+        errorBox.style.display =
+        "block";
+
+        errorBox.textContent =
+        "İndirme sırasında hata oluştu.";
+    }
+
+    spinner.style.display =
+    "none";
+
+    buttonText.textContent =
+    "İndir";
+
+    downloadBtn.disabled =
+    false;
+
+});
+
+</script>
+
+</body>
+</html>
